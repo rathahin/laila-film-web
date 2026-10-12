@@ -33,7 +33,7 @@
   const BUILT = 6;                            // how many acts exist so far
   // Where the pictures, videos, voice and music live. In the editor Preview the film server on this Mac answers and is used;
   // on the published web page it cannot be reached, so the public copy (export/web, uploaded by build_web.py) is used instead.
-  const PUBLIC_BASE = 'https://rathahin.github.io/laila-film-web/';
+  const PUBLIC_BASE = 'https://cdn.jsdelivr.net/gh/rathahin/laila-film-web@main/';
   const LOCAL_BASE = 'http://localhost:8765/';
   const localUp = await new Promise((ok) => { const im = new Image(), done = (v) => { clearTimeout(tm); ok(v); }; const tm = setTimeout(() => done(false), 900); im.onload = () => done(true); im.onerror = () => done(false); im.src = LOCAL_BASE + 'icons/vote_qr.png?probe=' + Date.now(); });
   const ICON_URL = (localUp ? LOCAL_BASE : PUBLIC_BASE) + 'icons/';
