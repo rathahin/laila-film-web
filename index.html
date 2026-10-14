@@ -37,6 +37,7 @@
   const LOCAL_BASE = 'http://localhost:8765/';
   const localUp = await new Promise((ok) => { const im = new Image(), done = (v) => { clearTimeout(tm); ok(v); }; const tm = setTimeout(() => done(false), 900); im.onload = () => done(true); im.onerror = () => done(false); im.src = LOCAL_BASE + 'icons/vote_qr.png?probe=' + Date.now(); });
   const ICON_URL = (localUp ? LOCAL_BASE : PUBLIC_BASE) + 'icons/';
+  const PUBCAM = { k: 1, dy: 0 };                           // camera correction for the published page (see the camera send in frame())
 
   const INK = '#16191F', MUTED = '#5E636D', RED = '#E8112D', CRIMSON = '#C8102E', TEAL = '#15B8A6', AMBER = '#9A5300', TEALD = '#0B8F86';
   const u = (n) => 'calc(var(--u) * ' + n + ')';
@@ -275,6 +276,7 @@
     .cnt{text-align:center}
     .cnt b{display:block;font:700 ${u(112)}/1 "Space Grotesk","DM Sans",system-ui,sans-serif;letter-spacing:-.03em;color:${INK}}
     .cnt span{display:block;margin-top:${u(10)};font:600 ${u(26)} "DM Sans",system-ui,sans-serif;color:${MUTED}}
+    .calbox{width:${u(1140)};height:${u(600)};box-sizing:border-box;border:${u(3)} solid #e8112d;border-radius:${u(36)};pointer-events:none}
     .eyb{font:700 ${u(20)} "DM Sans",system-ui,sans-serif;letter-spacing:.3em;text-transform:uppercase;color:${CRIMSON}}
     .mini{width:${u(72)};height:${u(46)};border-radius:${u(8)};background:linear-gradient(180deg,#fff,#f0f2f7);box-shadow:0 ${u(6)} ${u(14)} rgba(40,52,90,.14),0 0 0 ${u(1)} rgba(40,52,90,.07)}
     .mini i{display:block;height:${u(5)};border-radius:${u(3)};background:rgba(120,130,155,.3);margin:${u(13)} ${u(10)} 0}
@@ -445,8 +447,13 @@
   let U = 1, VW = 1, VH = 1, CAMK = 1;
   const fit = () => {
     VW = innerWidth; VH = innerHeight;
-    const sh = Math.min(VH, VW * 9 / 16);              // the film is a centred 16:9 stage, whatever the window shape
+    let sh = Math.min(VH, VW * 9 / 16);                // the film is a centred 16:9 stage, whatever the window shape
     CAMK = VH / sh; U = sh / K;
+    const st = document.getElementById('stage');
+    if (!localUp) {                                    // the published player draws the 3D on a fixed 1920 x 1080 canvas pinned to the window's top-left corner: the page follows that canvas, not the window
+      sh = 1080; CAMK = 1; U = sh / K;
+      st.style.left = '0'; st.style.top = '0'; st.style.marginLeft = '0'; st.style.marginTop = '0';
+    } else { st.style.left = ''; st.style.top = ''; st.style.marginLeft = ''; st.style.marginTop = ''; }
     document.documentElement.style.setProperty('--u', U + 'px');
     dust.width = Math.round(1408 * U); dust.height = Math.round(792 * U);
     linesSvg.setAttribute('viewBox', '0 0 ' + dust.width + ' ' + dust.height);
@@ -1587,6 +1594,8 @@
   const INK6 = [];
   const INKR = 3, INKW = 1140 * INKR, INKH = 600 * INKR;                                   // the content textures are drawn at 3x (3420 x 1800), so the text stays crisp when the sheet fills a 4K-ish frame
   let ink6Ready = false;
+  const DIAG6 = [];
+  let cal6 = false; const calBox = mk('calbox', '');                                                                        // what the 3D set-up reported; shown on the menu so a published page can be diagnosed without a console
   const palette6 = ['#E82228', '#2B2A2E', '#0B8F86'];
   const loadInkImage6 = (src) => new Promise((resolve) => {
     const im = new Image(); im.crossOrigin = 'anonymous';
@@ -1708,7 +1717,7 @@
       ink6Ready=true;document.body.classList.add('ink6');
     }catch(err){
       INK6.forEach(item=>send(item.object.id,{visible:false}));
-      console.warn('Act 6 native ink fallback:',String(err));
+      console.warn('Act 6 native ink fallback:',String(err));DIAG6.push('ink: '+String(err&&err.message||err));
     }
   }
 
@@ -1760,7 +1769,7 @@
         });
         await S.setMaterial(RG6[i].id,mat);OPT6[i]=refs;
       }
-    }catch(err){console.warn('Act 6 optical shader fallback:',String(err));}
+    }catch(err){console.warn('Act 6 optical shader fallback:',String(err));DIAG6.push('optical: '+String(err&&err.message||err));}
   }
   const applyGlass6=()=>{for(let i=0;i<3;i++){const u=OPT6[i]&&OPT6[i].u;if(!u)continue;const g=glass6(i);u.tint.value.set(g.tint);for(const [k] of GLASS_KEYS6)u[k].value=g[k];for(let j=0;j<3;j++)if(u.rearCols[j])u.rearCols[j].value.set(glass6(j).tint);}};
   applyGlass6();
@@ -1782,7 +1791,7 @@
   vote6.innerHTML = '<img class="v-logo" alt="Asiacell" src="' + ICON_URL + 'asiacell.png">'
     + '<div class="v-fam">' + vname('L', 'AI', 'LA', 'for customers') + vname('L', 'AI', 'TH', 'for our live agents') + vname('CAPT', 'AI', 'N', 'for sales and dealers') + '<div class="v-name slot"><b>?</b><span>IT Resolver</span></div></div>'
     + '<h1 class="v-h1">He’s earned a name.</h1><div class="v-lead">The engineer behind all of them has no name yet. Pick one.</div>'
-    + '<div class="v-cards">' + vcard('A', 'FAIQ', 'فائق', 'outstanding') + vcard('B', 'MUAIN', 'معين', 'the one who helps') + vcard('C', 'AIDE', '&nbsp;', 'the AI assistant') + '</div>'
+    + '<div class="v-cards">' + vcard('A', 'FAIQ', 'فائق', 'outstanding') + vcard('B', 'MUAIN', 'معين', 'the one who helps') + vcard('C', 'AIDE', '&nbsp;', 'assistant to an important person') + '</div>'
     + '<div class="v-vote"><div class="v-scan">Scan to vote</div><div class="v-ai-stage"><div class="v-brain-beam"></div><svg class="v-brain" viewBox="0 0 300 150" role="img" aria-label="AI brain"><defs><linearGradient id="b6metal" x2=".6" y2="1"><stop stop-color="#fff"/><stop offset=".5" stop-color="#d5eeef"/><stop offset="1" stop-color="#83aab7"/></linearGradient></defs><ellipse cx="150" cy="138" rx="100" ry="8" fill="#627586" opacity=".14"/><path d="M147 30C130 8 104 15 95 32C73 26 54 45 59 62C35 76 46 103 63 111C66 136 98 142 116 129C132 135 144 123 147 111Z M153 30C170 8 196 15 205 32C227 26 246 45 241 62C265 76 254 103 237 111C234 136 202 142 184 129C168 135 156 123 153 111Z" fill="url(#b6metal)" stroke="#368e98" stroke-width="2.5"/><g fill="none" stroke="#479ca4" stroke-width="2.5" stroke-linecap="round"><path d="M95 32v24l24 13v35l20 15M59 62l25 14v32l32 21M63 111l21-3 35-17M95 56l22-13 20 10M205 32v24l-24 13v35l-20 15M241 62l-25 14v32l-32 21M237 111l-21-3-35-17M205 56l-22-13-20 10"/></g><g fill="#fff" stroke="#e82228" stroke-width="2"><circle cx="95" cy="56" r="4"/><circle cx="119" cy="91" r="4"/><circle cx="84" cy="108" r="4"/><circle cx="137" cy="53" r="4"/><circle cx="205" cy="56" r="4"/><circle cx="181" cy="91" r="4"/><circle cx="216" cy="108" r="4"/><circle cx="163" cy="53" r="4"/></g></svg><div class="v-qr"><img alt="QR code" src="' + ICON_URL + 'vote_qr.svg"></div></div><div class="v-link"><b><i>asiacell.com/appLink/</i>voteTheName</b><span>Voting closes <em>[ DATE ]</em></span></div></div>';
   const brainQR6=vote6.querySelector(".v-qr"),brainMesh6=vote6.querySelector(".v-brain"),brainBeam6=vote6.querySelector(".v-brain-beam");
   const rv = (r, a) => {
@@ -1826,6 +1835,7 @@
       const lp6=layoutPose6(i,unfold);
       const px = lerp(cx, FAN[i][0], unfold)+lp6.x, py = lerp(16, FAN[i][1], unfold) - (1 - rise) * 420+lp6.y, pz = lerp(cz, FAN[i][2], unfold)+lp6.z, pry = lerp(cry, -8, unfold)+lp6.ry, prx = lerp(0, 2, unfold)+lp6.rx, ps = lerp(1, 0.7, unfold)*lp6.s;
       put(c, px, py, pz, rise * o6 * vis, { ry: pry, rx: prx, s: ps });
+      if (i === 0) put(calBox, px, py, pz, (cal6 || layoutMode6) && rise > 0.5 ? 1 : 0, { ry: pry, rx: prx, s: ps });   // calibration: in Layout mode (or with K) the page outlines where it puts sheet 1; the real sheet should sit exactly inside
       if (has6) {                                                                        // the slab and its digit follow the page's panel exactly; the digit sits at the panel's top-left corner, turned with it
         const on = rise > 0.05 && o6 > 0.02 && (Math.abs(A) < 90 || unfold > 0.01), sk = r2(ps * rise), a = pry * Math.PI / 180, nk = r2(sk * clamp01(eback(prog(t, RV6[i][0], 0.7))));   // waiting sheets stay hidden during solo views; rear optical content appears only in the final stack
         const ox = -464 * sk + 1915 * nk, oy = 227 * sk - 173 * nk, oz = 60 * sk - 18 * nk;      // the glyph sits 1915 left and 173 up of the Text object's origin, so the object is offset to put the glyph on the panel's top-left corner (measured on screen: 13 Oct)
@@ -1892,7 +1902,7 @@
   vote6.innerHTML = '<img class="v-logo" alt="Asiacell" src="' + ICON_URL + 'asiacell.png">'
     + '<div class="v-fam">' + vname('L', 'AI', 'LA', 'for customers') + vname('L', 'AI', 'TH', 'for our live agents') + vname('CAPT', 'AI', 'N', 'for sales and dealers') + '<div class="v-name slot"><b>?</b><span>IT Resolver</span></div></div>'
     + '<h1 class="v-h1">He’s earned a name.</h1><div class="v-lead">The engineer behind all of them has no name yet. Pick one.</div>'
-    + '<div class="v-cards">' + vcard('A', 'FAIQ', 'فائق', 'outstanding') + vcard('B', 'MUAIN', 'معين', 'the one who helps') + vcard('C', 'AIDE', '&nbsp;', 'the AI assistant') + '</div>'
+    + '<div class="v-cards">' + vcard('A', 'FAIQ', 'فائق', 'outstanding') + vcard('B', 'MUAIN', 'معين', 'the one who helps') + vcard('C', 'AIDE', '&nbsp;', 'assistant to an important person') + '</div>'
     + '<div class="v-vote"><div class="v-scan">Scan to vote</div><div class="v-qr"><img alt="QR code" src="' + ICON_URL + 'vote_qr.svg"></div><div class="v-link"><b><i>asiacell.com/appLink/</i>voteTheName</b><span>Voting closes <em>[ DATE ]</em></span></div></div>';
   const rv = (r, a) => { r.el.style.opacity = a.toFixed(3); r.el.style.transform = r.vr ? 'scaleY(' + a.toFixed(3) + ')' : 'translateY(' + ((1 - a) * 12 * U).toFixed(1) + 'px)'; };
 
@@ -2207,6 +2217,7 @@
     if(layoutMode6 || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
     const n = parseInt(e.key, 10);
     if (e.key === 's' || e.key === 'S') { sndToggle(); return; }
+    if (e.key === 'k' || e.key === 'K') { cal6 = !cal6; return; }                       // calibration: the page outlines where it thinks glass sheet 1 is, and shows the real sheet there
     if (n >= 1 && n <= 6) startAct(n - 1);
     else if (e.key === 'a' || e.key === 'A') command(10 + BUILT);                                                  // play every act in one go
     else if (e.key === 'r' || e.key === 'R') startAct(act);
@@ -2218,6 +2229,7 @@
   for (let i = 0; i < BUILT; i++) { const b = document.createElement('button'); b.textContent = '▶ Play Act ' + (i + 1) + ' · ' + TITLES[i]; b.addEventListener('click', () => startAct(i)); menu.appendChild(b); }
   menu.appendChild(sndBtn);
   const msg = document.createElement('span'); msg.className = 'note'; msg.textContent = 'Start your screen recording first, then click Play all (or press A). S turns the sound on and off. Click the top-left corner to come back to this menu.'; menu.appendChild(msg);
+  msg.textContent += ' · 3D ' + (W3.on ? 'on' : 'off (' + W3.err + ')') + ' · glass ' + (has6 ? 'scene' : 'css') + ' · ink ' + (ink6Ready ? 'native' : 'fallback') + ' · optical ' + OPT6.filter(Boolean).length + '/3 · media ' + (localUp ? 'local' : 'public') + (DIAG6.length ? ' · ' + DIAG6.join(' · ') : '') + ' · ' + innerWidth + 'x' + innerHeight;
   resetBtn.addEventListener('click', () => { idle = true; });
   // Remote control for record_film.py. The film server holds one numbered command; this page asks for it, acknowledges it and reports when it is done.
   // Command code: 10 * first act + last act (for example 14 = play Acts 1 to 4); 97 = show the corner marks only; 98 = ping; 99 = back to the menu.
@@ -2265,7 +2277,7 @@
     cam.cy = lin(t, [[0, 0], [18.5, 16], [27.5, 10], [41, 30], [44.2, 0], [50, 0], [83, 10], [137, 0], [193, 6]]) + (t < 9 ? -40 * Math.exp(-t / 1.5) : 0);
     cam.cx = Math.sin(t * 0.21) * (7 + 8 * prog(t, 83, 12)) + (t < 9 ? 150 * Math.exp(-t / 1.7) : 0);      // the opening swoop: the camera sweeps in from the side and settles
     world.style.transform = 'translate3d(' + (-cam.cx * U).toFixed(2) + 'px,' + (cam.cy * U).toFixed(2) + 'px,' + (cam.dz * U).toFixed(2) + 'px)';
-    if (camObj) send(camObj.id, { position: { x: r2(cam.cx), y: r2(cam.cy), z: r2((CAMZ - cam.dz) * CAMK) } });
+    if (camObj) send(camObj.id, { position: { x: r2(cam.cx), y: r2(cam.cy + PUBCAM.dy), z: r2((CAMZ - cam.dz) * CAMK * PUBCAM.k) } });   // the published player draws the scene larger than the editor Preview; PUBCAM corrects it (measured with the K outline)
     // the rotating fan behind everything follows film time, so clips join seamlessly
     custImg(t >= 20.3 && t < 83);
     if (t < 53) act1(t);
