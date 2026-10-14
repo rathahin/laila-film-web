@@ -452,6 +452,7 @@
     const st = document.getElementById('stage');
     if (!localUp) {                                    // the published player draws the 3D on a fixed 1920 x 1080 canvas pinned to the window's top-left corner: the page follows that canvas, not the window
       sh = 1080; CAMK = 1; U = sh / K;
+      document.documentElement.style.zoom = String(Math.floor(Math.min(1, VW / 1920, VH / 1080) * 1000) / 1000);   // shrink the whole page so the fixed 1920 x 1080 film is never cut off by a smaller window
       st.style.left = '0'; st.style.top = '0'; st.style.marginLeft = '0'; st.style.marginTop = '0';
     } else { st.style.left = ''; st.style.top = ''; st.style.marginLeft = ''; st.style.marginTop = ''; }
     document.documentElement.style.setProperty('--u', U + 'px');
@@ -1507,7 +1508,6 @@
       put(g.el, (g.c - 6) * 80, 122 - g.r * 56 + (1 - a) * 26 + lift * 70, 0, o, { s: 0.92 + 0.08 * a });
     });
     let n = Math.max(0, Math.min(65, Math.floor((t - 202.6) / 0.092) + 1));
-    if (t >= 208.6 && t < 208.95) n = 64; else if (t >= 208.95 && t < 209.3) n = 66; else if (t >= 209.3) n = 65;
     const sA = n + ' tickets'; if (cntAb.textContent !== sA) cntAb.textContent = sA;
     fput(cntA, 262, eout(prog(t, 202.4, 0.6)) * (1 - prog(t, 222.6, 0.4)));
     const chainT = [211.2, 213.3, 215.8, 218.4], chainOut = 1 - prog(t, 222.2, 0.6);
@@ -2228,6 +2228,46 @@
   { const all = document.createElement('button'); all.textContent = '▶ Play all · Acts 1–' + BUILT; all.style.fontWeight = '700'; all.addEventListener('click', () => command(10 + BUILT)); menu.appendChild(all); }       // one button for the whole film (the green corner marks flash for 1.7 s first, then the film starts)
   for (let i = 0; i < BUILT; i++) { const b = document.createElement('button'); b.textContent = '▶ Play Act ' + (i + 1) + ' · ' + TITLES[i]; b.addEventListener('click', () => startAct(i)); menu.appendChild(b); }
   menu.appendChild(sndBtn);
+  // ---- Record full HD: the browser records THIS TAB itself (no screen, no manual crop), cut to the 1920 x 1080 film canvas, voice and music included.
+  // Works on the published page (my.spline.design). The tab must show the whole 1920 x 1080 canvas: on a smaller screen zoom the browser out first.
+  const recBtn = document.createElement('button'); recBtn.textContent = '● Record full HD'; menu.appendChild(recBtn);
+  const recStyle = document.createElement('style'); recStyle.textContent = 'body.rec6 #layoutToggle6,body.rec6 #layoutTools6{display:none!important}'; document.head.appendChild(recStyle);
+  let rec6 = null;
+  const recordFilm = async () => {
+    if (rec6) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) { alert('Recording needs Chrome on the published page (my.spline.design), not the editor Preview.'); return; }
+    const cv = [...document.querySelectorAll('canvas')].find((c) => c.getBoundingClientRect().width >= 1000) || null;
+    const box = cv ? cv.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+    const fitZ = Math.min(1, innerWidth / Math.max(1, box.right), innerHeight / Math.max(1, box.bottom));   // shrink the page on screen so the whole 1920 x 1080 film is visible; the recording is still scaled back to 1920 x 1080
+    const oldZoom = document.documentElement.style.zoom;
+    if (fitZ < 0.999) { document.documentElement.style.zoom = String(Math.floor(fitZ * 1000) / 1000); await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))); }
+    let stream;
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true, preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude' }); }
+    catch (e) { document.documentElement.style.zoom = oldZoom; return; }
+    const track = stream.getVideoTracks()[0];
+    try { if (cv && window.CropTarget && track.cropTo) await track.cropTo(await CropTarget.fromElement(cv)); } catch (e) { console.warn('crop to canvas failed', e); }
+    try { await track.applyConstraints({ width: 1920, height: 1080, frameRate: 30 }); } catch (e) { console.warn('size constraint failed', e); }
+    const mime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+    const chunks = []; const r = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 20000000, audioBitsPerSecond: 192000 });
+    r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    r.onstop = () => {
+      stream.getTracks().forEach((k) => k.stop()); document.body.classList.remove('rec6'); rec6 = null; document.documentElement.style.zoom = oldZoom;
+      const blob = new Blob(chunks, { type: mime || 'video/webm' }), a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'LAILA_film_1080p.' + (/mp4/.test(mime) ? 'mp4' : 'webm'); document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    };
+    if (!SND.on) sndToggle();
+    document.body.classList.add('rec6'); rec6 = r;
+    r.start(1000);
+    command(10 + BUILT); marksUntil = performance.now();                       // play all acts at once, without the green start marks
+    let seen = false;
+    const watch = setInterval(() => {
+      if (!idle) seen = true;
+      if (seen && (filmTime6 >= ACTS[BUILT - 1][1] - 0.05 || idle)) { clearInterval(watch); setTimeout(() => { if (r.state !== 'inactive') r.stop(); }, 800); }
+    }, 100);
+    track.addEventListener('ended', () => { clearInterval(watch); if (r.state !== 'inactive') r.stop(); });
+  };
+  recBtn.addEventListener('click', recordFilm);
   const msg = document.createElement('span'); msg.className = 'note'; msg.textContent = 'Start your screen recording first, then click Play all (or press A). S turns the sound on and off. Click the top-left corner to come back to this menu.'; menu.appendChild(msg);
   msg.textContent += ' · 3D ' + (W3.on ? 'on' : 'off (' + W3.err + ')') + ' · glass ' + (has6 ? 'scene' : 'css') + ' · ink ' + (ink6Ready ? 'native' : 'fallback') + ' · optical ' + OPT6.filter(Boolean).length + '/3 · media ' + (localUp ? 'local' : 'public') + (DIAG6.length ? ' · ' + DIAG6.join(' · ') : '') + ' · ' + innerWidth + 'x' + innerHeight;
   resetBtn.addEventListener('click', () => { idle = true; });
